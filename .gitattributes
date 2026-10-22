@@ -1,0 +1,7 @@
+# Stable source bytes for cache signatures and reference-project comparisons.
+* text=auto eol=lf
+
+# Preserve the existing CRLF resources and model metadata.
+/config/architecture.json text eol=crlf
+/assets/reference/*.svg text eol=crlf
+/models/vision/metadata.json text eol=crlf

@@ -1,0 +1,62 @@
+# Python bytecode, local dependencies and development caches.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+/.vendor/
+/.training_deps*/
+/.ultralytics/
+/.matplotlib/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.ipynb_checkpoints/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.egg-info/
+/build/
+/dist/
+
+# Local IDE settings, secrets and OS metadata.
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
+!.env.sample
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Generated simulation evidence, candidate caches and training outputs.
+/results/
+/results_*/
+/results-*/
+/runs/
+/data/vision_synthetic/
+
+# Duplicate source snapshots; their original versions remain in Git history.
+/archive/
+
+# Downloadable base weights; retain the fine-tuned PT, ONNX and metadata.
+/models/vision/yolov8n.pt
+
+# Logs, editor backups and temporary output.
+*.log
+MUJOCO_LOG.TXT
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+/tmp/
+/temp/
+/output/
+/outputs/
+
+# Keep all project source, verify*.py, tools/, assets/, config/ and documents.

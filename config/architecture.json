@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "map_version": "recommended_map_final_20261022",
+  "units": "m",
+  "coordinate_system": {
+    "east": "+x",
+    "north": "+y",
+    "up": "+z"
+  },
+  "bounds_wall_centerlines_m": {
+    "xmin": -5.5,
+    "xmax": 5.5,
+    "ymin": 0.0,
+    "ymax": 13.0
+  },
+  "wall_thickness_m": 0.12,
+  "wall_height_m": 2.4,
+  "flight_height_m": 1.25,
+  "start_xyz_m": [
+    -3.8,
+    1.2,
+    1.25
+  ],
+  "goal_xyz_m": [
+    1.0,
+    12.0,
+    1.25
+  ],
+  "internal_walls": [
+    {
+      "id": "wall_01",
+      "y_m": 2.6,
+      "opening_ids": [
+        "O01",
+        "O02"
+      ]
+    },
+    {
+      "id": "wall_02",
+      "y_m": 5.4,
+      "opening_ids": [
+        "O04",
+        "O03"
+      ]
+    },
+    {
+      "id": "wall_03",
+      "y_m": 8.2,
+      "opening_ids": [
+        "O05",
+        "O06"
+      ]
+    },
+    {
+      "id": "wall_04",
+      "y_m": 10.6,
+      "opening_ids": [
+        "O07"
+      ]
+    }
+  ],
+  "openings": [
+    {
+      "id": "O01",
+      "center_xy_m": [
+        0.5,
+        2.6
+      ],
+      "width_m": 1.3625,
+      "normal_xy": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "O02",
+      "center_xy_m": [
+        4.4,
+        2.6
+      ],
+      "width_m": 1.8,
+      "normal_xy": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "O03",
+      "center_xy_m": [
+        -1.5,
+        5.4
+      ],
+      "width_m": 1.45,
+      "normal_xy": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "O04",
+      "center_xy_m": [
+        -4.2,
+        5.4
+      ],
+      "width_m": 1.8,
+      "normal_xy": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "O05",
+      "center_xy_m": [
+        1.5,
+        8.2
+      ],
+      "width_m": 1.3625,
+      "normal_xy": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "O06",
+      "center_xy_m": [
+        3.7,
+        8.2
+      ],
+      "width_m": 1.8,
+      "normal_xy": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "O07",
+      "center_xy_m": [
+        1.0,
+        10.6
+      ],
+      "width_m": 1.8,
+      "normal_xy": [
+        0,
+        1
+      ]
+    }
+  ]
+}
