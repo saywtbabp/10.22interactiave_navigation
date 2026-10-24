@@ -32,10 +32,12 @@ def main():
     from navigation.mission import Mission
     parameters={'O01':(.673,6.317),'O05':(.437,2.473)} if args.hard_door else None
     mission=Mission(cfg,variant=args.variant,baseline=args.baseline,door_parameters=parameters,ui=ui)
+    print('Vision: trained YOLOv8n / ONNX CPU / SHA-256',mission.memory.vision.model_sha256,flush=True)
     try:
         okay=mission.run()
         if ui and not args.close_on_done:ui.keep_open()
     finally:
+        mission.memory.close()
         mission.sensors.close()
         if ui:ui.close()
     return 0 if okay else 1

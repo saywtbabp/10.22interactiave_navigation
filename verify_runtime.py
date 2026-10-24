@@ -58,14 +58,19 @@ def main():
             packet.time=(0. if variant=='all_empty' else 1.)+i*.1;packets.append(packet)
         s.close()
     memory=Memory(arch,cfg)
-    for packet in packets:memory.fuse(packet)
+    for packet in packets[:7]:memory.fuse(packet)
+    # A completed validation is now required; scan absence alone is not free.
+    memory.verified(o['id'],.7,'free',0.,completed=True,valid_validation_position=True,
+                    force_source='explicit completed-validation test fixture')
+    for packet in packets[7:]:memory.fuse(packet)
     checks['contradiction_explicitly_reverified']=any(e['event']=='contradiction_requires_reverification' for e in memory.events)
     checks['new_door_not_free']=memory.records[o['id']].traversability!='free'
     # Two old frames cannot be combined with one fresh frame after a gap.
     gap=Memory(arch,cfg)
     for packet in packets[:2]:gap.fuse(packet)
     third=deepcopy(packets[2]);third.time=2.;gap.fuse(third)
-    checks['stale_candidate_prefix_not_counted']=gap.records[o['id']].traversability=='unverified'
+    checks['stale_candidate_prefix_not_counted']=gap.records[o['id']].traversability=='unverified' and gap.records[o['id']].range_count<3
+    memory.close();gap.close()
     save_json(fixture/'checks.json',checks);print(checks,flush=True)
     assert all(v for k,v in checks.items() if k!='cancel_seconds'),checks
     assert checks['cancel_seconds']<15,checks

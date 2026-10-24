@@ -8,6 +8,7 @@ import math
 import runtime
 import mujoco
 import numpy as np
+from .force_observer import ForceObserver
 
 @dataclass
 class Packet:
@@ -23,6 +24,8 @@ class Packet:
     valid: np.ndarray
     returns: list
     points: np.ndarray
+    scan_origin: np.ndarray = None
+    force_measurement: dict = None
 
 class Sensors:
     def __init__(self,world,cfg):
@@ -32,6 +35,15 @@ class Sensors:
         self.opt.sitegroup[:]=0;self.opt.flags[mujoco.mjtVisFlag.mjVIS_TENDON]=0
         self.opt.flags[mujoco.mjtVisFlag.mjVIS_LIGHT]=0
         self.dropout_frames=0;self.range_dropout=0.;self.camera_dropout=0.
+        self.contact=ForceObserver(cfg)
+        self.force_rng=np.random.default_rng(cfg.seed+919)
+
+    def measure_force(self,calibrate=False):
+        w=self.world;pos,vel,R,gyro=w.observed()
+        acc=w.data.sensor('imu_acc').data.copy()+self.force_rng.normal(0,.012,3)
+        stable=np.linalg.norm(vel)<.08 and np.linalg.norm(gyro)<.25 and R[2,2]>.985
+        self.contact.update(float(w.data.time),acc,R,w.mass,float(w.ctrl.sum()),calibrate and stable)
+        return self.contact.record()
 
     def acquire(self,force=False):
         w,cfg=self.world,self.cfg;m,d=w.model,w.data
@@ -42,6 +54,7 @@ class Sensors:
         rgb=self.renderer.render().copy()
         if self.rng.random()<self.camera_dropout:rgb=None;self.dropout_frames+=1
         pos,vel,R,gyro=w.observed();cp=d.cam_xpos[m.camera('onboard').id].copy()
+        force=self.measure_force(calibrate=w.stage=='INITIAL_SETTLE' and d.time>.25)
         optical=R@np.column_stack(([1.,0,0],[0,0,-1.],[0,1.,0]))
         # Full pose follows frame roll, pitch and yaw; this is not a gimbal.
         rel=np.linspace(-math.radians(78),math.radians(78),cfg.scan_rays)
@@ -56,8 +69,8 @@ class Sensors:
                 # Material is simulator-private. Sensor output contains no ID/class.
                 if int(m.geom_group[int(hit[0])])==1:
                     r=self.rng.random()
-                    if r<.12:distance=-1.;status='dropout'
-                    elif r<.70:
+                    if r<cfg.glass_dropout_probability:distance=-1.;status='dropout'
+                    elif r<1-cfg.glass_surface_return_probability:
                         distance=mujoco.mj_ray(m,d,origin,direction,opaque,True,w.frame_id,hit);status='surface_return'
                     else:status='weak_return'
                 else:status='surface_return'
@@ -69,7 +82,7 @@ class Sensors:
         points=origin[None,:]+ranges[:,None]*dirs
         self.packet=Packet(float(d.time),rgb,pos,R,cp,optical,
                            cfg.camera_height/(2*math.tan(math.radians(cfg.camera_fovy)/2)),
-                           dirs,ranges,valid,returns,points)
+                           dirs,ranges,valid,returns,points,origin,force)
         return self.packet,True
 
     def close(self):

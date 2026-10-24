@@ -54,7 +54,7 @@ def signature(arch,cfg,opening,state,mode):
     conf=asdict(cfg);conf.pop('workers')
     digest=hashlib.sha256(json.dumps(dict(arch=arch,cfg=conf,opening=opening,state=state,mode=mode,
                                         mujoco=mujoco.__version__,schema=4),sort_keys=True).encode())
-    for path in [ROOT/'navigation'/n for n in ('physics.py','interactions.py','geometry.py','sampling.py','sensors.py','perception.py')]+[ROOT/'scene'/'build.py',ROOT/'assets'/'models'/'tensegrity_real_model.xml',ROOT/'experiments'/'library.py']:
+    for path in [ROOT/'navigation'/n for n in ('physics.py','interactions.py','geometry.py','sampling.py','sensors.py','perception.py','vision.py','ambiguity.py','force_observer.py','verification.py')]+[ROOT/'scene'/'build.py',ROOT/'assets'/'models'/'tensegrity_real_model.xml',ROOT/'experiments'/'library.py']:
         digest.update(path.read_bytes())
     for path in sorted((ROOT/'assets'/'textures').glob('*.png')):
         digest.update(path.name.encode());digest.update(path.read_bytes())

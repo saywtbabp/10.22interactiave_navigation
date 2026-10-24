@@ -12,9 +12,9 @@ def main():
     import argparse
     p=argparse.ArgumentParser();p.add_argument('--standard',action='store_true');args=p.parse_args()
     variant='standard' if args.standard else 'all_empty'
-    folder=ROOT/'results'/('gui_consistency_'+variant);folder.mkdir(exist_ok=True)
+    folder=ROOT/'results'/('gui_yolo_consistency_'+variant);folder.mkdir(exist_ok=True)
     headless=Mission(Config(),variant=variant,output=folder/'headless')
-    headless.run();headless.sensors.close()
+    headless.run();headless.memory.close();headless.sensors.close()
     ui=LiveUI(speed=8.);live=Mission(Config(),variant=variant,output=folder/'live',ui=ui)
     checks={}
     def pause():ui.toggle_pause();checks['paused']=ui.paused
@@ -46,6 +46,6 @@ def main():
         ui.root.after(350,ui.request_close);ui.keep_open()
         save_json(folder/'checks.json',checks);print(checks,flush=True)
         assert all(checks.values()),checks
-    finally:live.sensors.close();ui.close()
+    finally:live.memory.close();live.sensors.close();ui.close()
 
 if __name__=='__main__':freeze_support();main()

@@ -1,0 +1,11 @@
+# Offline training only, project .training_deps*; existing torch is reused.
+ultralytics==8.3.40
+ultralytics-thop==2.0.12
+opencv-python-headless==4.10.0.84
+onnx==1.16.2
+tqdm==4.67.1
+seaborn==0.13.2
+py-cpuinfo==9.0.0
+PyYAML==6.0.2
+psutil==6.1.0
+protobuf==4.25.5

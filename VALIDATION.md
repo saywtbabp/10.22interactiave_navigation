@@ -1,5 +1,7 @@
 # 实测验证与适用范围
 
+> 历史记录：本文件对应 2026-10-22 颜色规则版本。当前 YOLO / IMU 歧义开口版本见 [VALIDATION_YOLO.md](VALIDATION_YOLO.md) 与 `results/yolo_upgrade_release.json`；本页旧结果不作为当前代码验收。
+
 验证日期：2026-10-22。入口是本项目 `main.py`，解释器为 `G:\anaconda3\envs\mujoco\python.exe`，Python 3.9.25 / MuJoCo 3.3.2 / NumPy 2.0.2 / Pillow 11.3.0 / Tk 8.6。无需新增依赖。
 
 ## 已完成的完整任务

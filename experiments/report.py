@@ -18,7 +18,7 @@ def generate(mission):
 <div class="stats"><div class="stat">任务结果<b>STATUS</b></div><div class="stat">仿真总耗时 / 含交互恢复<b>TIME s</b></div><div class="stat">候选数量<b>COUNT</b></div><div class="stat">Probe / 重规划<b>PROBES / REPLANS</b></div></div>
 <h2>同步三视图关键帧</h2><button onclick="step(-1)">← 上一帧</button><select id="pick" onchange="show(+this.value)"></select><button onclick="step(1)">下一帧 →</button><img id="frame" alt="已记录的同步三视图">
 <h2>门决策</h2><table><tr><th>开口</th><th>G / m</th><th>p_D</th><th>D</th><th>动作</th><th>原因</th></tr>ROWS</table>
-<h2>数据与适用范围</h2><p>工程 RGB / 测距检测器，未训练 YOLO；理想定位与自身柔性多体状态仪器；机架全部外接触法向力测量；门角由测距面板拟合。低 G 短路分支不计算路线标签，p_D/D 保留为空。失败与数值异常保留在各运行目录和候选库中。</p>
+<h2>数据与适用范围</h2><p>已训练 YOLOv8n / ONNX，适用范围为合成 MuJoCo 场景；检测分数不等于材质或可推动概率。累积测距生成歧义开口，低速验证使用 IMU / 姿态 / 电机输入估计外力，区分受阻、可通行与未完成。理想定位与自身柔性多体状态仪器；门 Probe 保留全部外接触法向力仪器；门角由测距拟合。低 G 短路分支的 p_D/D 保留为空。</p>
 <p><a href="summary.json">结果摘要</a> · <a href="decisions.json">完整决策与缓存来源</a> · <a href="flight.csv">飞行与控制记录</a> · <a href="sensors.jsonl">RGB / 测距 / 位姿时序</a> · <a href="online_map.json">最终认知地图</a> · <a href="events.json">地图事件</a> · <a href="weight_history.json">候选权重历史</a></p>
 <script>const frames=FRAMES;let index=0;const select=document.getElementById('pick');frames.forEach((f,i)=>{const o=document.createElement('option');o.value=i;o.textContent=f.replace('_dashboard.png','');select.append(o)});function show(i){if(!frames.length)return;index=Math.max(0,Math.min(frames.length-1,i));document.getElementById('frame').src=frames[index];select.value=index}function step(n){show(index+n)}show(frames.length-1);</script></main></html>'''
     for key,value in [('STATUS',html.escape(status)),('TIME','{:.2f}'.format(s['simulated_time_s'])),('COUNT',str(1<<mission.cfg.sobol_power)),

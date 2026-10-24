@@ -1,0 +1,21 @@
+{
+  "architecture": "Ultralytics YOLOv8n",
+  "ultralytics_version": "8.3.40",
+  "classes": {
+    "0": "door",
+    "1": "glass"
+  },
+  "input_size": 320,
+  "epochs": 35,
+  "onnx_sha256": "e8cf07baace7cec4d394a5f05f75831de55eb5f47bb4f5df6ee3c411550fe8a7",
+  "test_metrics": {
+    "metrics/precision(B)": 0.9862594041440478,
+    "metrics/recall(B)": 0.9441391941391941,
+    "metrics/mAP50(B)": 0.9779407997696397,
+    "metrics/mAP50-95(B)": 0.9372875124165351,
+    "fitness": 0.9413528411518456
+  },
+  "training_source": "data/vision_synthetic/manifest.json",
+  "scope": "synthetic MuJoCo domain only; scores are not material or movability probabilities",
+  "license": "AGPL-3.0, https://ultralytics.com/license"
+}

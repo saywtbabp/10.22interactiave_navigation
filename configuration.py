@@ -33,6 +33,23 @@ class Config:
     scan_range: float = 6.
     scan_rays: int = 161
     confirmation_frames: int = 3
+    yolo_model: str = 'models/vision/door_glass_yolov8n.onnx'
+    yolo_input_size: int = 320
+    yolo_confidence: float = .45
+    yolo_iou: float = .45
+    vision_max_age: float = .65
+    vision_max_gap: float = .35
+    vision_wait_s: float = .07
+    scan_history_s: float = 2.
+    ambiguity_min_side_points: int = 3
+    ambiguity_gap_fraction: float = .45
+    glass_surface_return_probability: float = .12
+    glass_dropout_probability: float = .18
+    verify_speed: float = .10
+    verify_timeout: float = 10.
+    verify_force_floor: float = .45
+    verify_force_sigma: float = 5.
+    force_filter_time: float = .025
     workers: int = 4
     seed: int = 22
 

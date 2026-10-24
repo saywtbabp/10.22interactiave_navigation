@@ -34,6 +34,7 @@ class Mission:
         self.replans=0;self.probes=0;self.success=False;self.failure='';self.prediction=False;self.progress=(0,1024)
         self.door_beliefs={};self.evaluation=[]
         self.inertial=[]
+        self.verifications=[]
         self.belief_owner=None
         self.weights=np.ones(1<<cfg.sobol_power)/(1<<cfg.sobol_power);self.labels=None;self.theta=candidate_worlds(cfg)
         self.metrics=dict(G=None,p_D=None,D=None);self.force_peak=0.;self.saved_keys=set();self.wall_started=time.perf_counter()
@@ -53,7 +54,9 @@ class Mission:
             record=dict(time_s=packet.time,position=packet.position,rotation=packet.rotation,
                         camera_position=packet.camera_position,optical_rotation=packet.optical_rotation,
                         focal_px=packet.focal,detections=self.memory.detections,
-                        distances_m=packet.distances,valid=packet.valid,returns=packet.returns)
+                        distances_m=packet.distances,valid=packet.valid,returns=packet.returns,
+                        scan_origin=packet.scan_origin,force_observer=packet.force_measurement,
+                        association=self.memory.last_association)
             self._log.write(__import__('json').dumps(safe(record),ensure_ascii=False,allow_nan=False)+'\n')
             # Time-stamped evidence including frames on every interaction, not a fake replay.
             if packet.rgb is not None and (packet.time-self._last_image>=2. or w.stage in ('PROBE','GLASS_VERIFY','PUSH','BACKOFF') and packet.time-self._last_image>=.4):
@@ -193,47 +196,16 @@ class Mission:
             rec.bypass_selected=True;self.memory.event(w.data.time,oid,'push_failed_then_avoid');return
         self.status='脱离与恢复';path=recover(w,o,panel)
         if w.data.time-rec.angle_time>.25:raise PhysicsFailure('stale_panel_geometry_before_crossing')
-        rec.traversability='free';rec.confirmation='confirmed';self.memory.event(w.data.time,oid,'door_geometry_clear',estimated_angle_rad=rec.angle)
+        rec.traversability='free';rec.verification_state='verified_free';rec.confirmation='confirmed';self.memory.event(w.data.time,oid,'door_geometry_clear',estimated_angle_rad=rec.angle)
         self.path=path;w.fly(path[1:],yaw=0.);self.save_key(oid+'_crossed')
 
     def glass(self,rec):
-        w=self.world;o=rec.geometry;oid=rec.stable_id;x,y=o['center_xy_m']
-        self.status='歧义开口接触验证';self.action='Verify';self.reason='疑似玻璃独立低速验证，不进入门 G/D 门控'
-        self.metrics=dict(G=None,p_D=None,D=None)
-        # Slowly approach the expected surface using only rotor feedback.
-        w.fly([[x+.12,y-.47]],yaw=0.,speed=.20)
-        w.target=np.array([x+.12,y+.10,1.25]);w.stage='GLASS_VERIFY';start=w.data.time;peak=0.;blocked=False;valid_free=False
-        while w.data.time-start<5:
-            w.step(yaw=0.,speed=.12);peak=max(peak,w.force)
-            p=w.observed()[0]
-            if w.force>.35:blocked=True;break
-            if p[1]>=y+.08:
-                valid_free=rec.range_evidence.get('clearance_support',0)>.8 and w.data.time-rec.last_seen_time<.3
-                break
-        if blocked:
-            actual_position,actual_velocity,actual_rotation,_=w.observed()
-            self.memory.verified(oid,float(w.data.time),'blocked',peak,semantic_preserved=rec.semantic,
-                                 observed_position=actual_position.tolist(),observed_speed_m_s=float(np.linalg.norm(actual_velocity)),
-                                 approach_speed_limit_m_s=.12)
-            self.status='玻璃受阻 / 退离恢复';w.stage='BACKOFF';w.target=np.array([x+.12,y-.85,1.25])
-            stable=0.;start=w.data.time
-            while w.data.time-start<10:
-                w.step(yaw=0.,speed=.30)
-                p,v,R,g=w.observed();ok=w.force<.1 and np.linalg.norm(v)<.12 and R[2,2]>.96 and np.linalg.norm(g)<.5 and p[1]<y-.70
-                stable=stable+self.cfg.timestep if ok else 0.
-                if stable>.2:break
-            else:raise PhysicsFailure('glass_recovery_timeout')
-            self.save_key(oid+'_glass_blocked')
-        elif valid_free:
-            self.memory.verified(oid,float(w.data.time),'free',peak,valid_validation_position=True)
-            w.fly([[x,y+.75]],yaw=0.)
-        else:
-            rec.bypass_selected=True;self.memory.event(w.data.time,oid,'verification_inconclusive')
-            w.fly([[x,y-.85]],yaw=0.,stage='BACKOFF')
+        from .verification import verify_opening
+        return verify_opening(self,rec)
 
     def run(self):
         try:
-            w=self.world;w.hold(self.arch['start_xyz_m'],.8,stage='INITIAL_SETTLE',yaw=0.)
+            w=self.world;w.hold(self.arch['start_xyz_m'],1.2,stage='INITIAL_SETTLE',yaw=0.)
             self.save_key('00_initial')
             for _ in range(24):
                 if np.linalg.norm(w.observed()[0]-self.arch['goal_xyz_m'])<.10:self.success=True;break
@@ -248,7 +220,7 @@ class Mission:
                 self.status='观察匿名开口';self.action='Observe';self.reason='同步 RGB / 测距，多帧确认'
                 w.hold(dest,1.1,yaw=0.)
                 if rec.semantic=='door':self.door(rec)
-                elif rec.semantic=='suspected_glass':self.glass(rec)
+                elif rec.semantic=='suspected_glass' or rec.verification_state=='pending':self.glass(rec)
                 elif rec.traversability=='free':
                     self.status='净空通行';p=self.plan([x,y+.72]);w.fly(p[1:],yaw=0.);self.save_key(oid+'_free_crossed')
                 else:
@@ -273,13 +245,20 @@ class Mission:
         save_json(self.folder/'decisions.json',self.decisions);save_json(self.folder/'weight_history.json',self.weight_history)
         save_json(self.folder/'door_beliefs.json',self.door_beliefs);save_json(self.folder/'evaluation_truth.json',self.evaluation)
         save_json(self.folder/'imu_measurements.json',self.inertial)
+        save_json(self.folder/'vision_trace.json',self.memory.vision_log)
+        save_json(self.folder/'verification_trace.json',self.verifications)
         self.summary=dict(success=self.success,failure=self.failure,simulated_time_s=float(w.data.time),
             wall_time_s=time.perf_counter()-self.wall_started,config=asdict(self.cfg),variant=self.variant,baseline=self.baseline,
             probes=self.probes,replans=self.replans,map_version=self.memory.version,final_position=w.observed()[0],
             contact_peak_N=w.contact_peak,wall_contact_peak_N=w.wall_peak,height_range_m=[w.min_height,w.max_height],max_tilt_deg=w.max_tilt,
             sensor_frames=self.sensors.frames,decision_count=len(self.decisions),
-            assumptions=['ideal localization/AHRS and own multibody proprioception','RGB/range engineering detector, not YOLO',
-                         'virtual all-external-contact normal force instrument','lidar panel angle fit, not hinge encoder'])
+            vision=self.memory.vision.record(),verification_count=len(self.verifications),
+            assumptions=['ideal localization/AHRS and own multibody proprioception',
+                         'trained YOLOv8n ONNX; synthetic domain, not real-world calibrated',
+                         'bilateral accumulated range ambiguity; absent returns do not prove free',
+                         'glass verification uses IMU/AHRS/motor residual force estimate',
+                         'door Probe keeps original virtual all-external-contact instrument',
+                         'lidar panel angle fit with standard hinge prior, not hinge encoder'])
         save_json(self.folder/'summary.json',self.summary)
         from experiments.report import generate
         generate(self)

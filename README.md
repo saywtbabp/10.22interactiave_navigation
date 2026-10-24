@@ -1,6 +1,8 @@
 # INTERACT · 基于粗地图与主动交互的无人机导航
 
-在 PyCharm 打开本文件所在的 **interactive_navigation_mujoco** 文件夹，选择现有解释器 `G:\anaconda3\envs\mujoco\python.exe`，右键运行 `main.py`。不需要命令行参数、训练权重、网页服务或重新安装依赖。原参考工程没有修改。
+在 PyCharm 打开本文件所在的 **interactive_navigation_mujoco** 文件夹，选择现有解释器 `G:\anaconda3\envs\mujoco\python.exe`，右键运行 `main.py`。不需要命令行参数、网页服务或重新训练。已提供训练后的 YOLOv8n ONNX 权重和项目内隔离的 ONNX Runtime，原 Conda 环境及参考工程没有修改。
+
+**2026-10-23 视觉 / 传感器更新：** 整图 YOLO 取代颜色规则；累积测距从双侧支撑发现歧义开口；玻璃与空开口通过低速、零速终态验证，用 IMU / 姿态 / 电机输入估计外力，结果分为受阻、可通行与未完成。门的 1024 候选 G/D 方法保留。实现、训练数据和适用范围见 [视觉传感器更新说明](VISION_SENSOR_UPGRADE.md)。
 
 ## 实时运行
 
@@ -31,9 +33,9 @@
 ## 研究方法与信息边界
 
 - 初始地图仅有建筑与匿名开口；语义、通行性、交互记忆分别维护。
-- 感知使用实际 RGB 的纹理/色度线索与同次测距，是可替换的仿真工程检测器，**不是 YOLO，也不声称真实玻璃识别泛化**。检测分数是像素比例，不是门能推动的概率。
+- 感知使用实际整图 RGB 的已训练 YOLOv8n，输出像素框、类别和分数，再与曝光时的匿名测距 / 粗地图开口几何关联。没有颜色规则或真值标签回退；缺少模型时明确报错。模型分数不是可推动概率，也没有宣称真实场景泛化。
 - 固定相机跟随完整机体姿态；扫描有视场、遮挡、量程、丢测和弱/背景回波。无效回波不作为自由空间证据。重复帧不重复融合，已确认记忆不会随视野消失而重置。
-- 门角来自扫描点的面板线拟合；策略不读取真实铰链角。接触反馈是所有机体外接触法向力之和，不按环境对象名字筛选目标门接触。真值仅在物理引擎、观察者视图和独立评估中使用。
+- 门角来自扫描点的面板线拟合；策略不读取真实铰链角。门 Probe 保留所有机体外接触法向力仪器；歧义开口验证改用经偏置 / 噪声标定的 IMU 残差外力，阈值与实际峰值分开记录。真值仅在物理引擎、离线训练标注及独立评估中使用。
 - 明确采用理想定位/AHRS与自身柔性多体状态仪器。候选克隆接收的是自身多体观测与扫描估计的门角/转速；不复制环境隐藏参数、其他门的真值状态或完整仿真 data。
 - 门的标准框宽与西侧铰链是识别门后的结构先验；扫描拟合面板方向估计门角。尚未实现任意铰链侧、非标门框的自动三维重建，不把这部分称为通用几何 SLAM。
 - Sobol 完整 N=1024，I∈[0.05,0.80] kg·m²、τ_f∈[0.01,8.00] N·m，初始等权。每扇门独立，不把第一扇门后验复制到第二扇门。
@@ -43,7 +45,7 @@
 - Probe 后从同一观测后状态，逐候选重新执行 Door / Bypass 剩余路线，重算标签。若后续仍分歧，保守绕行。Push 使用不同输入，后验保留而不继续套标准 Probe 库。
 - 几何比较中，若 Probe 后位置处于“假设门洞封闭”的膨胀区，两条几何分支都加入同一条显式 A* 退离前缀。实际物理续程仍从原始观测后状态开始，不回滚真实仿真。
 - 接触状态若轻微落入保守门框膨胀区，只允许两分支共享的、单调减少初始膨胀重叠且不进入新障碍的退离连接；之后所有普通 A* 边继续保持完整安全距离。该几何连接不拖动无人机，不改变候选续程初态。`verify_contact_geometry.py` 保存了实测 1.971 mm 起点重叠的回归测试。
-- 玻璃走独立低速接触验证：受阻→制动退离→稳定恢复→入图→绕行。空开口需有效多帧净空证据后通过。
+- 疑似玻璃与双侧支撑的歧义开口走独立低速验证：受阻→退离恢复→障碍入图→绕行；完成规定行程并稳定、测量有效→可通行；超时 / 数据失效→未完成。远处回波或没有返回均不会单独把待验证开口标为自由通道。
 
 ## 缓存与输出
 
@@ -52,6 +54,10 @@
 `results/cache/` 按配置、建筑、模型、控制、传感器定义、候选及明确观测状态计算 SHA-256 签名。完整缓存才可用于决策，每 32 个世界保存一次；中断后重跑继续未完成部分。不同地图、到达状态或 Probe 后状态不能直接套用旧成本。数值异常保留并阻止该库用于决策；物理/控制失败保留实际耗时、原因与无穷目标成本，JSON 中非有限值表示为 null。
 
 每次运行生成一个结果文件夹：`summary.json`、`flight.csv`、`sensors.jsonl`、`camera/`、`online_map.json`、`events.json`、`decisions.json`、`door_beliefs.json`、`weight_history.json`、真实三视图关键帧和 `report.html`。`evaluation_truth.json` 与 `scene_truth_for_evaluation.json` 是独立评估数据，不参与策略。HTML 是已记录运行的离线证据查看器，实时演示使用 main.py。
+
+新增 `vision_trace.json` 保存曝光 / 返回时间、模型哈希、真实框与关联；`verification_trace.json` 保存完整验证行程、IMU 外力、阈值及三态结果。`models/vision/metadata.json` 记录训练和留出测试结果。更新后的正式任务结果单独存储，旧运行均保留为历史记录，不能作为本次代码验收。
+
+本轮完整运行与验收见 [YOLO / 传感器验证记录](VALIDATION_YOLO.md)，自动审核入口为 `release_check.py`，结果为 `results/yolo_upgrade_release.json`。
 
 `evaluate_results.py` 可审核全部运行、生成 `results/index.html` 索引并导出完整候选 CSV。`verify_runtime.py` 实测取消/续算、异常缓存拒绝、过期证据和矛盾核验。当前机器有 24 个逻辑处理器，正式入口设置 8 个计算进程；可以在 `config/settings.json` 改小。关闭窗口时会取消排队任务，等待当前少量候选结束并保存，不再等待整个 1024 队列。
 
@@ -62,6 +68,10 @@
 & 'G:/anaconda3/envs/mujoco/python.exe' 'E:/Desktop/projectgroup/newfolder/interactive_navigation_mujoco/main.py' --headless
 # 数学、惯量、16 组几何与实际机载感知内容变体检查
 & 'G:/anaconda3/envs/mujoco/python.exe' 'E:/Desktop/projectgroup/newfolder/interactive_navigation_mujoco/verify.py'
+# YOLO 换色门、视觉漏检玻璃、IMU 验证、空通道、超时与无效量测
+& 'G:/anaconda3/envs/mujoco/python.exe' 'E:/Desktop/projectgroup/newfolder/interactive_navigation_mujoco/verify_sensor_upgrade.py'
+# 实际交付的 ONNX 流程在 144 张留出图上的检测表现与延迟
+& 'G:/anaconda3/envs/mujoco/python.exe' 'E:/Desktop/projectgroup/newfolder/interactive_navigation_mujoco/tools/evaluate_onnx.py'
 # 真实 GUI 与 headless 一致性；默认全空变体，--standard 使用完整默认交互场景
 & 'G:/anaconda3/envs/mujoco/python.exe' 'E:/Desktop/projectgroup/newfolder/interactive_navigation_mujoco/verify_live.py' --standard
 # 明确标注的场景/基线

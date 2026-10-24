@@ -15,7 +15,8 @@ def audit(folder):
                motor_limits_pass=bool((motors>=-1e-10).all() and (motors<=10+1e-10).all()),
                fixed_height_pass=summary['height_range_m'][0]>.5 and summary['height_range_m'][1]<2.05,
                no_wall_contact=summary['wall_contact_peak_N']<.1,
-               glass_contacts={oid:len(r['contact_history']) for oid,r in mapdata['records'].items() if r['semantic']=='suspected_glass'},
+               glass_contacts={oid:sum(h['outcome']=='blocked' for h in r['contact_history']) for oid,r in mapdata['records'].items() if r['semantic']=='suspected_glass'},
+               glass_verifications={oid:len(r['contact_history']) for oid,r in mapdata['records'].items() if r['semantic']=='suspected_glass'},
                observed_records={oid:dict(semantic=r['semantic'],traversability=r['traversability'],bypass=r['bypass_selected'])
                                  for oid,r in mapdata['records'].items()},
                map_updates=len(events),frame_count=summary['sensor_frames'])

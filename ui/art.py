@@ -36,6 +36,7 @@ def map_image(mission,width=520,height=544):
         semantic={'unknown':'待识别','door':'门','suspected_glass':'疑似玻璃'}[rec.semantic]
         passage={'unverified':'待验证','free':'可通行','blocked':'受阻'}[rec.traversability]
         label=semantic+' / '+passage+(' · 绕行' if rec.bypass_selected else '')
+        if rec.verification_state=='pending' and rec.traversability=='unverified':label+=' · 验证候选'
         text(d,(a[0]+1,a[1]-16),label,8,color)
         if rec.semantic=='door' and rec.angle_time>=0:
             from navigation.interactions import panel_geometry
@@ -43,6 +44,10 @@ def map_image(mission,width=520,height=544):
             end=pivot+width*np.array([math.cos(rec.angle),math.sin(rec.angle)])
             d.line([xy(pivot),xy(end)],fill=color,width=3)
     p=mission.sensors.packet
+    for stamp,points in list(mission.memory.ranges.frames)[::4]:
+        for pt in points[::3,:2]:
+            if -5.5<=pt[0]<=5.5 and 0<=pt[1]<=13:
+                u,v=xy(pt);d.point((u,v),fill='#345460')
     if p is not None:
         for pt in p.points[p.valid, :2]:
             if -5.5<=pt[0]<=5.5 and 0<=pt[1]<=13:
@@ -61,14 +66,18 @@ def map_image(mission,width=520,height=544):
 
 def camera_image(mission):
     packet=mission.sensors.packet
+    exposure=mission.memory.visual_packet
+    if exposure is not None and packet is not None and packet.time-exposure.time<=mission.cfg.vision_max_age:
+        packet=exposure
     if packet is None or packet.rgb is None:
         im=Image.new('RGB',(480,320),'#142335');d=ImageDraw.Draw(im);text(d,(15,140),'等待有效机载图像',18,MUTED);return im
     im=Image.fromarray(packet.rgb).copy();d=ImageDraw.Draw(im)
     for det in mission.memory.detections:
+        if abs(det.get('time_s',-1)-packet.time)>1e-6:continue
         col=COLORS.get(det['class_name'],COLORS['unknown']);box=det['bbox_xyxy'];d.rectangle(box,outline=col,width=2)
         label='{} {} {:.2f}'.format(det['stable_id'],det['class_name'],det['score']);boxy=max(0,box[1]-19)
         d.rectangle([box[0],boxy,min(im.width,box[0]+len(label)*7),boxy+18],fill='#101e2d');text(d,(box[0]+3,boxy),label,10,col)
-    d.rectangle([0,im.height-22,im.width,im.height],fill='#0a1522');text(d,(8,im.height-20),'BODY RGB  ·  t = {:.2f} s'.format(packet.time),12,TEAL)
+    d.rectangle([0,im.height-22,im.width,im.height],fill='#0a1522');text(d,(8,im.height-20),'YOLOv8n / RGB  ·  exposure {:.2f} s'.format(packet.time),12,TEAL)
     return im
 
 class ObserverRenderer:
@@ -109,7 +118,7 @@ def dashboard(mission,renderer):
     im.paste(map_image(mission,500,490),(1066,160))
     for i,(lab,col) in enumerate([('未知',COLORS['unknown']),('门',COLORS['door']),('疑似玻璃',COLORS['suspected_glass']),('净空',COLORS['free']),('受阻',COLORS['blocked'])]):
         xx=1074+i*94;d.ellipse((xx,667,xx+6,673),fill=col);text(d,(xx+10,660),lab,11,MUTED)
-    text(d,(42,736),'03   固定机载相机  /  RGB + 检测',14)
+    text(d,(42,736),'03   固定机载相机  /  YOLOv8n',14)
     cam=ImageOps.contain(camera_image(mission),(464,235),Image.Resampling.LANCZOS)
     im.paste(cam,(40+(464-cam.width)//2,772))
     text(d,(562,736),'决策与执行',14)
@@ -120,7 +129,8 @@ def dashboard(mission,renderer):
     d.line((564,853,1018,853),fill=BORDER)
     text(d,(564,867),'{}  /  {}'.format(mission.current or 'S → T',mission.action),17,TEAL)
     text(d,(564,900),'{}  ·  重规划 {}  ·  Probe {}'.format(mission.world.stage,mission.replans,mission.probes),12,MUTED)
-    text(d,(564,929),'外接触 {:.2f} N   |   高度 {:.3f} m'.format(mission.world.force,mission.world.observed()[0][2]),12,MUTED)
+    estimated=float(np.linalg.norm((mission.sensors.contact.force-mission.sensors.contact.bias)[:2]))
+    text(d,(564,929),'IMU 外力估计 {:.2f} N   |   高度 {:.3f} m'.format(estimated,mission.world.observed()[0][2]),12,MUTED)
     if mission.prediction:
         done,total=mission.progress;d.rounded_rectangle((564,967,1018,975),radius=3,fill=BORDER)
         d.rounded_rectangle((564,967,565+int(453*done/max(1,total)),975),radius=3,fill=TEAL)

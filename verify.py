@@ -59,21 +59,22 @@ def run():
     report['physical_inertia']=inertia
     # Real sensor images in content/position variants, legal different initial poses.
     sensor_cases=[]
-    for variant,index,expected in [('standard',0,'door'),('standard',2,'suspected_glass'),('standard',3,'free'),
-                                  ('glass_removed',2,'free'),('swapped',0,'suspected_glass'),('swapped',2,'door')]:
+    for variant,index,expected in [('standard',0,'door'),('standard',2,'suspected_glass'),('standard',3,'pending_verification'),
+                                  ('glass_removed',2,'pending_verification'),('swapped',0,'suspected_glass'),('swapped',2,'door')]:
         o=arch['openings'][index];test_arch=deepcopy(arch);test_arch['start_xyz_m']=approach(o).tolist()
         world=World(test_arch,cfg,variant=variant);s=Sensors(world,cfg);memory=Memory(arch,cfg)
         def sample(world):
             packet,fresh=s.acquire()
             if fresh:memory.fuse(packet)
         world.callback=sample;world.hold(approach(o),.75,yaw=0.)
-        rec=memory.records[o['id']];actual='free' if rec.traversability=='free' else rec.semantic
+        rec=memory.records[o['id']];actual='pending_verification' if rec.semantic=='unknown' and rec.verification_state=='pending' else rec.semantic
         assert actual==expected,(variant,o['id'],actual,expected,rec.visual_evidence,rec.range_evidence)
         before=memory.version;assert not memory.fuse(s.packet) and memory.version==before
         # Missing RGB and all invalid ranges must not turn unknown into free.
         invalid=deepcopy(s.packet);invalid.time+=1;invalid.rgb=None;invalid.valid[:]=False;invalid.distances[:]=np.nan
         fresh_memory=Memory(arch,cfg);fresh_memory.fuse(invalid)
         assert all(r.traversability=='unverified' for r in fresh_memory.records.values())
+        fresh_memory.close();memory.close()
         sensor_cases.append(dict(variant=variant,opening=o['id'],expected=expected,actual=actual,
                                  duplicate_frame_rejected=True,missing_data_not_free=True))
         s.close()
