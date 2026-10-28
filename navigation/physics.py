@@ -8,6 +8,15 @@ from scene.build import build_xml
 def unit(x):return x/max(float(np.linalg.norm(x)),1e-12)
 def clip_norm(x,limit):return x*min(1.,limit/max(float(np.linalg.norm(x)),1e-12))
 
+def forward_yaw(direction):
+    """World yaw for the body-fixed camera's +Y forward axis."""
+    x,y=np.asarray(direction)[:2]
+    return math.atan2(-x,y)
+
+def yaw_error(R,heading):
+    angle=math.atan2(R[1,0],R[0,0])
+    return (angle-heading+math.pi)%(2*math.pi)-math.pi
+
 def allocation(mixer,limits,thrust,torque):
     raw=mixer@np.r_[thrust,torque];low,high=limits[:,0],limits[:,1]
     if np.all(raw>=low) and np.all(raw<=high):return raw
@@ -104,20 +113,38 @@ class World:
         self.target=np.r_[np.asarray(target)[:2],1.25];self.stage=stage;end=self.data.time+duration
         while self.data.time<end-1e-9:self.step(yaw=yaw)
 
+    def align_yaw(self,heading,stage='ALIGN_PATH'):
+        """Rotor-only turn at the current position; sensing keeps running."""
+        anchor,v,R,g=self.observed();self.target=anchor.copy();self.stage=stage;self.yaw_target=float(heading)
+        if np.linalg.norm(v)<.065 and np.linalg.norm(g)<.16 and abs(yaw_error(R,heading))<.11:return
+        start=self.data.time;dwell=0.
+        while self.data.time-start<15.:
+            self.step(yaw=heading)
+            if self.step_count%5:continue
+            p,v,R,g=self.observed()
+            stable=(np.linalg.norm(p-anchor)<.065 and np.linalg.norm(v)<.065
+                    and np.linalg.norm(g)<.16 and abs(yaw_error(R,heading))<.11)
+            dwell=dwell+.01 if stable else 0.
+            if dwell>=.25:return
+        raise PhysicsFailure('heading_alignment_timeout')
+
     def fly(self,path,settle=True,stage='FLIGHT',yaw=None,speed=None):
         self.stage=stage
         for point in path:
-            self.target=np.r_[np.asarray(point)[:2],1.25];start=self.data.time;dwell=0.
-            delta=self.target-self.observed()[0]
-            heading=math.atan2(-delta[0],delta[1]) if np.linalg.norm(delta[:2])>.2 else self.yaw_target
+            target=np.r_[np.asarray(point)[:2],1.25]
+            pos,_,R,_=self.observed();delta=target-pos
+            heading=forward_yaw(delta) if np.linalg.norm(delta[:2])>.2 else self.yaw_target
             if yaw is not None:heading=yaw
+            # Cruise turns before translating. Explicit yaw belongs to a
+            # precision interaction/crossing and may intentionally allow strafing.
+            if yaw is None and abs(yaw_error(R,heading))>.11:self.align_yaw(heading)
+            self.target=target;self.stage=stage;start=self.data.time;dwell=0.
             while self.data.time-start<45.:
                 self.step(yaw=heading,speed=speed)
                 if self.step_count%5:continue
                 p,v,R,g=self.observed();reached=np.linalg.norm(p-self.target)<(.065 if settle else .085)
                 if settle:
-                    angle=math.atan2(R[1,0],R[0,0]);err=(angle-heading+math.pi)%(2*math.pi)-math.pi
-                    reached &= np.linalg.norm(v)<.065 and np.linalg.norm(g)<.16 and abs(err)<.11
+                    reached &= np.linalg.norm(v)<.065 and np.linalg.norm(g)<.16 and abs(yaw_error(R,heading))<.11
                     dwell=dwell+.01 if reached else 0.;reached=dwell>=.25
                 if reached:break
             else:raise PhysicsFailure('waypoint_timeout '+str(self.target.tolist()))

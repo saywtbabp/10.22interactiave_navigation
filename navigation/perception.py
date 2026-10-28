@@ -121,11 +121,10 @@ class Memory:
                                         association='unique_geometry_match' if ids else 'unassociated_or_ambiguous'))
         for oid, rec in self.records.items():
             if oid not in matches:
-                rec.evidence_kind = ''; rec.evidence_count = 0
+                # Leaving the FOV or missing a detection supplies no contrary
+                # class evidence. Keep valid observations of this stable ID.
                 continue
             det = frame.detections[matches[oid]]; kind = det.class_name
-            if p.time-rec.last_seen_time > self.cfg.vision_max_gap:
-                rec.evidence_kind = ''; rec.evidence_count = 0
             rec.last_seen_time = p.time
             rec.visual_evidence = dict(det.record(), time_s=p.time, inference_ms=frame.inference_ms,
                                        model_sha256=frame.model_sha256, association='unique_geometry_match')

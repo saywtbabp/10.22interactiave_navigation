@@ -92,7 +92,7 @@ def route(w,opening,panel_state,kind,geo):
             if w.force>.1 or w.observed()[0][1]>opening['center_xy_m'][1]-.65:
                 path=recover(w,opening,panel_state,bypass=True);w.fly(path[1:],yaw=0.)
             planner=Planner(w.arch,w.cfg,sealed=[opening['id']],row=opening['center_xy_m'][1])
-            path,_=planner.plan(w.observed()[0],merge_pose(opening));w.fly(path[1:],yaw=0.)
+            path,_=planner.plan(w.observed()[0],merge_pose(opening));w.fly(path[1:])
         success=True
         if w.wall_peak>.1:success=False;reason='unexpected_wall_contact'
     except (PhysicsFailure,ValueError) as exc:reason=str(exc)

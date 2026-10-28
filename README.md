@@ -1,8 +1,26 @@
 # INTERACT · 基于粗地图与主动交互的无人机导航
 
+## Git 归档与新检出环境
+
+本仓库已清理全部历史提交中的生成产物和第三方依赖，保留原有三次提交的名称、顺序、作者与时间。版本库保留项目代码、实验与验证脚本、依赖清单、配置、地图、物理模型与纹理、研究文档，以及实际训练得到的 `models/vision/door_glass_yolov8n.pt`、运行使用的 `door_glass_yolov8n.onnx` 和 `metadata.json`。
+
+不归档 `.vendor/`、`.training_deps*`、可重新下载的基础权重 `models/vision/yolov8n.pt`，以及 `results/`、`runs/`、`data/vision_synthetic/`、IDE 配置、缓存、日志和临时文件。`archive/` 的重复源码快照也不再归档，其原始代码版本仍可在历史提交中查看。取消跟踪后，已有本地文件继续保留。
+
+新检出环境需准备 `requirements.txt` 指定的依赖。如需继续使用项目内隔离的 ONNX 运行库，可在本项目根目录执行：
+
+```powershell
+& 'G:/anaconda3/envs/mujoco/python.exe' -m pip install --target .vendor -r requirements-vision-runtime.txt
+```
+
+默认导航直接使用已归档的 ONNX，无需重训。离线重训另需准备 `requirements-vision-training.txt`、合适的 PyTorch 环境及基础权重 `models/vision/yolov8n.pt`，再用 `tools/generate_vision_data.py` 生成数据。
+
+新检出的版本不附带原始轨迹、相机图像、测试报告或候选缓存，运行相应入口后会重新生成。下文“已提供运行库 / 默认缓存”等历史交付描述不代表这些产物仍由 Git 分发。`.gitattributes` 固定已有源码和资源的换行格式，避免检出时改变缓存签名。
+
 在 PyCharm 打开本文件所在的 **interactive_navigation_mujoco** 文件夹，选择现有解释器 `G:\anaconda3\envs\mujoco\python.exe`，右键运行 `main.py`。不需要命令行参数、网页服务或重新训练。已提供训练后的 YOLOv8n ONNX 权重和项目内隔离的 ONNX Runtime，原 Conda 环境及参考工程没有修改。
 
 **2026-10-23 视觉 / 传感器更新：** 整图 YOLO 取代颜色规则；累积测距从双侧支撑发现歧义开口；玻璃与空开口通过低速、零速终态验证，用 IMU / 姿态 / 电机输入估计外力，结果分为受阻、可通行与未完成。门的 1024 候选 G/D 方法保留。实现、训练数据和适用范围见 [视觉传感器更新说明](VISION_SENSOR_UPGRADE.md)。
+
+**2026-10-25 分阶段航向更新：** 普通巡航和绕行沿当前航段朝前，较大的航向变化先通过旋翼原地转向；到达待交互开口附近后转向其法向。转向期间持续采集和融合传感器观测，同一匿名开口的有效视觉检测可跨视野中断累积，漏检不清零，类别冲突才重新计数。已有确认及当前测距充分时直接决策，不强制重等三帧或固定观察 1.1 秒。Probe / Push / 验证 / 退离与门洞精确通行保留各自的目标航向。候选世界的普通绕行同样使用巡航航向，转向耗时计入路线成本，旧候选缓存由源码签名自动隔离。检查入口为 `verify_heading.py`；说明和验证范围见 [分阶段航向说明](HEADING_CONTROL.md)。
 
 ## 实时运行
 

@@ -71,12 +71,52 @@ class Mission:
         # A stale fit is retained as memory but cannot silently authorize crossing.
         return float(rec.angle),float(rec.angular_velocity)
 
+    def observe_opening(self,rec):
+        """Face the opening without restarting already accumulated evidence."""
+        from .physics import forward_yaw
+        w=self.world;o=rec.geometry
+        self.status='转向目标开口';self.action='Observe'
+        self.reason='保留飞行中观测，转向期间继续融合 RGB / 测距'
+        w.align_yaw(forward_yaw(o['normal_xy']),stage='ALIGN_OPENING')
+        self.status='观察匿名开口';self.reason='沿用已有证据，仅在不足或动态几何过期时补充观测'
+        w.stage='OBSERVE';deadline=w.data.time+1.1
+        while True:
+            now=w.data.time
+            # Reuse the confirmed class; only current range quality is checked
+            # here. Moving-panel freshness is still checked before crossing.
+            range_ready=(0<=now-rec.range_evidence.get('time_s',-1.)<=.25
+                         and rec.range_evidence.get('quality_valid',False))
+            panel_ready=rec.semantic=='door' and range_ready
+            opening_ready=(rec.semantic!='door' and (rec.semantic=='suspected_glass' or rec.verification_state=='pending')
+                           and range_ready)
+            if panel_ready or opening_ready or rec.traversability=='free':return True
+            if now>=deadline:return False
+            w.step(yaw=w.yaw_target)
+
     def planner(self,extra_sealed=()):
         sealed=list(extra_sealed);panels=[]
         for oid,rec in self.memory.records.items():
             if rec.traversability=='blocked' or rec.bypass_selected:sealed.append(oid)
             elif rec.semantic=='door' and rec.traversability=='free':panels.append(panel_geometry(rec.geometry,rec.angle)[2])
         return Planner(self.arch,self.cfg,panels=panels,sealed=sealed)
+
+    def observation_target(self,opening):
+        """Keep the nominal stand-off unless an observed open leaf occupies it."""
+        nominal=approach(opening);planner=self.planner()
+        if not planner.collides(nominal)[0]:return nominal
+        center=np.asarray(opening['center_xy_m']);normal=np.asarray(opening['normal_xy'],dtype=float)
+        normal/=np.linalg.norm(normal);tangent=np.array([normal[1],-normal[0]])
+        candidates=[np.r_[center-distance*normal+offset*tangent,1.25]
+                    for distance in (.80,1.10,.65,1.25) for offset in (.24375,0.,-.24,.45,-.45)]
+        for target in sorted(candidates,key=lambda p:float(np.linalg.norm(p-nominal))):
+            if planner.collides(target)[0]:continue
+            try:planner.plan(self.world.observed()[0],target)
+            except ValueError:continue
+            self.memory.event(self.world.data.time,opening['id'],'observation_position_adjusted',
+                              nominal_position_m=nominal.tolist(),position_m=target.tolist(),
+                              source='current observed obstacle geometry')
+            return target
+        raise ValueError('no reachable observation position: '+opening['id'])
 
     def plan(self,goal):
         path,_=self.planner().plan(self.world.observed()[0],goal);self.path=path;self.replans+=1
@@ -216,9 +256,11 @@ class Mission:
                 if rec.traversability=='free':
                     dest=[x,y+.72];self.status='净空通行';self.action='Cross';self.reason='有效多帧测距已确认净空'
                     p=self.plan(dest);w.fly(p[1:]);self.save_key(oid+'_free_crossed');continue
-                dest=approach(o);p=self.plan(dest);w.fly(p[1:],yaw=0.)
-                self.status='观察匿名开口';self.action='Observe';self.reason='同步 RGB / 测距，多帧确认'
-                w.hold(dest,1.1,yaw=0.)
+                dest=self.observation_target(o);p=self.plan(dest);w.fly(p[1:])
+                if not self.observe_opening(rec):
+                    rec.bypass_selected=True
+                    self.memory.event(w.data.time,oid,'insufficient_current_observation_avoid',semantic_preserved=rec.semantic)
+                    continue
                 if rec.semantic=='door':self.door(rec)
                 elif rec.semantic=='suspected_glass' or rec.verification_state=='pending':self.glass(rec)
                 elif rec.traversability=='free':
@@ -228,7 +270,7 @@ class Mission:
             if not self.success and np.linalg.norm(w.observed()[0]-self.arch['goal_xyz_m'])<.10:self.success=True
             if not self.success:raise PhysicsFailure('navigation_iteration_limit')
             self.status='任务完成';self.action='Hover';self.reason='已到达目标并稳定悬停'
-            w.hold(self.arch['goal_xyz_m'],.6,stage='COMPLETE',yaw=0.)
+            w.hold(self.arch['goal_xyz_m'],.6,stage='COMPLETE')
             self.save_key('99_complete')
         except Exception as exc:
             self.failure=str(exc);self.status='任务未完成';self.reason=str(exc)
